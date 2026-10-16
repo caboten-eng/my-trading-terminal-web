@@ -231,11 +231,22 @@ function showChart(ticker) {
     allow_symbol_change: true,
    
     hide_volume: false,
-    studies: [
-      "MASimple@tv-basicstudies",
-      "MASimple@tv-basicstudies",
-      "MASimple@tv-basicstudies"
-    ],
+   
+studies: [
+  {
+    id: "MASimple@tv-basicstudies",
+    inputs: { length: 50 }
+  },
+  {
+    id: "MASimple@tv-basicstudies",
+    inputs: { length: 150 }
+  },
+  {
+    id: "MASimple@tv-basicstudies",
+    inputs: { length: 200 }
+  }
+],
+
     support_host: "https://www.tradingview.com"
 
   });
