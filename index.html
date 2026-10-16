@@ -13,10 +13,15 @@ body {
   margin:0;
   padding:20px;
 }
-main {max-width:1200px;margin:auto}
+main {max-width:1300px;margin:auto}
 h1 {font-size:24px}
-.subtitle {color:#8e9aaa}
-.summary {display:flex;gap:12px;margin:24px 0;flex-wrap:wrap}
+.subtitle,.muted {color:#8e9aaa}
+.summary {
+  display:flex;
+  gap:12px;
+  margin:24px 0;
+  flex-wrap:wrap;
+}
 .card {
   background:#171f2a;
   padding:18px;
@@ -27,8 +32,12 @@ h1 {font-size:24px}
 .number {font-size:28px;font-weight:bold}
 .green {color:#35d07f}
 .red {color:#ff5d68}
-.muted {color:#8e9aaa}
-table {width:100%;border-collapse:collapse;white-space:nowrap}
+.gold {color:#f0c75e}
+table {
+  width:100%;
+  border-collapse:collapse;
+  white-space:nowrap;
+}
 th,td {
   padding:12px;
   border-bottom:1px solid #263140;
@@ -69,13 +78,21 @@ button.active {
 }
 .pill.pass {background:#174a35;color:#35d07f}
 .pill.fail {background:#4a242a;color:#ff5d68}
-.note {color:#8e9aaa;font-size:13px;line-height:1.6}
+.pill.vcp {background:#51401e;color:#f0c75e}
+.note {
+  color:#8e9aaa;
+  font-size:13px;
+  line-height:1.6;
+}
 </style>
 </head>
 <body>
 <main>
+
 <h1>MY TRADING TERMINAL</h1>
-<p class="subtitle">Minervini SEPA + Relative Strength Screening</p>
+<p class="subtitle">
+  Minervini SEPA + Relative Strength + VCP Screening
+</p>
 
 <div class="summary">
   <div class="card">
@@ -94,68 +111,110 @@ button.active {
     <div>RS上位30%</div>
     <div class="number" id="rsPassed">—</div>
   </div>
+  <div class="card">
+    <div>VCP候補</div>
+    <div class="number gold" id="vcpCount">—</div>
+  </div>
 </div>
 
 <p id="status">データを読み込み中...</p>
 
 <div class="controls">
   <button onclick="loadData()">更新</button>
-  <button id="allButton" class="active" onclick="setFilter(false)">
+
+  <button id="allButton" class="active"
+          onclick="setFilter('all')">
     全銘柄
   </button>
-  <button id="passButton" onclick="setFilter(true)">
-    PASSのみ
+
+  <button id="passButton"
+          onclick="setFilter('pass')">
+    総合PASSのみ
+  </button>
+
+  <button id="vcpButton"
+          onclick="setFilter('vcp')">
+    VCP候補のみ
+  </button>
+
+  <button id="bothButton"
+          onclick="setFilter('both')">
+    総合PASS＋VCP
   </button>
 </div>
 
 <h2>スクリーニング結果</h2>
+
 <p class="note">
-  総合PASS = Minervini基本5条件 + RS上位30%。
-  RSは現在の監視銘柄内での相対順位（1〜99）です。
-  米国市場全体のIBD公式RS Ratingではありません。
+  総合PASS = Minervini基本5条件 + RS上位30%。<br>
+  VCP候補 = 値幅収縮・出来高減少・高値圏の3条件を満たす銘柄。<br>
+  VCPは簡易判定であり、チャート上の厳密なVCP認定ではありません。<br>
+  RSは現在の対象銘柄内での相対順位です。
 </p>
 
 <div class="table-wrap">
 <table>
 <thead>
 <tr>
-<th>銘柄</th>
-<th>株価</th>
-<th>RS</th>
-<th>MA50</th>
-<th>MA150</th>
-<th>MA200</th>
-<th>トレンド</th>
-<th>RS判定</th>
-<th>総合判定</th>
+  <th>銘柄</th>
+  <th>株価</th>
+  <th>RS</th>
+  <th>MA50</th>
+  <th>MA150</th>
+  <th>MA200</th>
+  <th>トレンド</th>
+  <th>RS判定</th>
+  <th>総合判定</th>
+  <th>VCPスコア</th>
+  <th>VCP候補</th>
 </tr>
 </thead>
 <tbody id="results"></tbody>
 </table>
 </div>
+
 </main>
 
 <script>
 let allStocks = [];
-let passOnly = false;
+let currentFilter = "all";
 
-function setFilter(onlyPass) {
-  passOnly = onlyPass;
+function setFilter(filter) {
+  currentFilter = filter;
 
-  document.getElementById("allButton")
-    .classList.toggle("active", !passOnly);
+  const buttons = {
+    all: "allButton",
+    pass: "passButton",
+    vcp: "vcpButton",
+    both: "bothButton"
+  };
 
-  document.getElementById("passButton")
-    .classList.toggle("active", passOnly);
+  for (const [key, id] of Object.entries(buttons)) {
+    document.getElementById(id)
+      .classList.toggle("active", key === filter);
+  }
 
   renderTable();
 }
 
-function makeBadge(passed) {
+function makeBadge(passed, vcp = false) {
   const span = document.createElement("span");
-  span.className = "pill " + (passed ? "pass" : "fail");
-  span.textContent = passed ? "PASS" : "FAIL";
+
+  span.className = "pill " +
+    (passed ? (vcp ? "vcp" : "pass") : "fail");
+
+  span.textContent = passed
+    ? (vcp ? "VCP候補" : "PASS")
+    : (vcp ? "—" : "FAIL");
+
   return span;
+}
+
+function addTextCell(tr, value, className = "") {
+  const td = document.createElement("td");
+  td.textContent = value ?? "—";
+  if (className) td.className = className;
+  tr.appendChild(td);
 }
 
 function renderTable() {
@@ -163,9 +222,22 @@ function renderTable() {
   tbody.replaceChildren();
 
   const stocks = allStocks
-    .filter(stock => !passOnly || stock.PASS === true)
+    .filter(stock => {
+      if (currentFilter === "pass") {
+        return stock.PASS === true;
+      }
+      if (currentFilter === "vcp") {
+        return stock.VCP_CANDIDATE === true;
+      }
+      if (currentFilter === "both") {
+        return stock.PASS === true &&
+               stock.VCP_CANDIDATE === true;
+      }
+      return true;
+    })
     .sort((a,b) =>
       Number(b.PASS) - Number(a.PASS) ||
+      Number(b.VCP_CANDIDATE) - Number(a.VCP_CANDIDATE) ||
       Number(b.RS ?? -1) - Number(a.RS ?? -1)
     );
 
@@ -176,48 +248,64 @@ function renderTable() {
     const link = document.createElement("a");
 
     link.textContent = stock.Ticker;
-    link.href = "https://www.tradingview.com/chart/?symbol="
-      + encodeURIComponent(stock.Ticker);
+    link.href =
+      "https://www.tradingview.com/chart/?symbol=" +
+      encodeURIComponent(stock.Ticker);
+
     link.target = "_blank";
     link.rel = "noopener noreferrer";
 
     tickerCell.appendChild(link);
     tr.appendChild(tickerCell);
 
-    const priceCell = document.createElement("td");
-    priceCell.textContent = stock.Price ?? "—";
-    tr.appendChild(priceCell);
+    addTextCell(tr, stock.Price);
 
-    const rsCell = document.createElement("td");
     const rs = Number(stock.RS);
+    const rsClass =
+      rs >= 70 ? "rs-high" :
+      rs >= 40 ? "rs-mid" : "rs-low";
 
-    if (stock.RS == null || !Number.isFinite(rs)) {
-      rsCell.textContent = "—";
-    } else {
-      rsCell.textContent = rs;
-      rsCell.className =
-        rs >= 70 ? "rs-high" :
-        rs >= 40 ? "rs-mid" : "rs-low";
-    }
-    tr.appendChild(rsCell);
+    addTextCell(
+      tr,
+      stock.RS == null ? "—" : stock.RS,
+      rsClass
+    );
 
     for (const field of ["MA50", "MA150", "MA200"]) {
-      const td = document.createElement("td");
-      td.textContent = stock[field] ?? "—";
-      tr.appendChild(td);
+      addTextCell(tr, stock[field]);
     }
 
     const trendCell = document.createElement("td");
-    trendCell.appendChild(makeBadge(stock.Trend_PASS === true));
+    trendCell.appendChild(
+      makeBadge(stock.Trend_PASS === true)
+    );
     tr.appendChild(trendCell);
 
-    const rsPassCell = document.createElement("td");
-    rsPassCell.appendChild(makeBadge(stock.RS_PASS === true));
-    tr.appendChild(rsPassCell);
+    const rsCell = document.createElement("td");
+    rsCell.appendChild(
+      makeBadge(stock.RS_PASS === true)
+    );
+    tr.appendChild(rsCell);
 
-    const totalCell = document.createElement("td");
-    totalCell.appendChild(makeBadge(stock.PASS === true));
-    tr.appendChild(totalCell);
+    const passCell = document.createElement("td");
+    passCell.appendChild(
+      makeBadge(stock.PASS === true)
+    );
+    tr.appendChild(passCell);
+
+    const score = Number(stock.VCP_SCORE ?? 0);
+
+    addTextCell(
+      tr,
+      score + " / 3",
+      score === 3 ? "gold" : "muted"
+    );
+
+    const vcpCell = document.createElement("td");
+    vcpCell.appendChild(
+      makeBadge(stock.VCP_CANDIDATE === true, true)
+    );
+    tr.appendChild(vcpCell);
 
     tbody.appendChild(tr);
   }
@@ -225,9 +313,11 @@ function renderTable() {
   if (stocks.length === 0) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
-    td.colSpan = 9;
+
+    td.colSpan = 11;
     td.className = "muted";
     td.textContent = "該当する銘柄はありません";
+
     tr.appendChild(td);
     tbody.appendChild(tr);
   }
@@ -267,6 +357,9 @@ async function loadData() {
 
     document.getElementById("rsPassed").textContent =
       allStocks.filter(s => s.RS_PASS === true).length;
+
+    document.getElementById("vcpCount").textContent =
+      allStocks.filter(s => s.VCP_CANDIDATE === true).length;
 
     renderTable();
 
