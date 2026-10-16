@@ -229,8 +229,15 @@ function showChart(ticker) {
     withdateranges: true,
     hide_side_toolbar: false,
     allow_symbol_change: true,
+   
     hide_volume: false,
+    studies: [
+      "MASimple@tv-basicstudies",
+      "MASimple@tv-basicstudies",
+      "MASimple@tv-basicstudies"
+    ],
     support_host: "https://www.tradingview.com"
+
   });
 
   widget.appendChild(script);
