@@ -13,42 +13,69 @@ body {
   margin:0;
   padding:20px;
 }
-main {max-width:1100px;margin:auto}
+main {max-width:1200px;margin:auto}
 h1 {font-size:24px}
 .subtitle {color:#8e9aaa}
-.summary {display:flex;gap:12px;margin:24px 0}
+.summary {display:flex;gap:12px;margin:24px 0;flex-wrap:wrap}
 .card {
   background:#171f2a;
   padding:18px;
   border-radius:12px;
   flex:1;
+  min-width:130px;
 }
 .number {font-size:28px;font-weight:bold}
 .green {color:#35d07f}
 .red {color:#ff5d68}
-table {width:100%;border-collapse:collapse}
+.muted {color:#8e9aaa}
+table {width:100%;border-collapse:collapse;white-space:nowrap}
 th,td {
   padding:12px;
   border-bottom:1px solid #263140;
   text-align:left;
 }
 th {color:#8e9aaa}
+tbody tr:hover {background:#17212e}
 a {color:#7bb5ff}
 button {
   background:#25354a;
   color:white;
-  border:0;
+  border:1px solid transparent;
   padding:10px 15px;
   border-radius:8px;
   cursor:pointer;
 }
+button.active {
+  background:#244b3c;
+  border-color:#35d07f;
+}
+.controls {
+  display:flex;
+  gap:10px;
+  margin:16px 0;
+  flex-wrap:wrap;
+}
 .table-wrap {overflow-x:auto}
+.rs-high {color:#35d07f;font-weight:bold}
+.rs-mid {color:#f0c75e;font-weight:bold}
+.rs-low {color:#ff5d68;font-weight:bold}
+.pill {
+  display:inline-block;
+  padding:4px 9px;
+  border-radius:6px;
+  background:#253140;
+  font-size:12px;
+  font-weight:bold;
+}
+.pill.pass {background:#174a35;color:#35d07f}
+.pill.fail {background:#4a242a;color:#ff5d68}
+.note {color:#8e9aaa;font-size:13px;line-height:1.6}
 </style>
 </head>
 <body>
 <main>
 <h1>MY TRADING TERMINAL</h1>
-<p class="subtitle">Minervini SEPA Screening</p>
+<p class="subtitle">Minervini SEPA + Relative Strength Screening</p>
 
 <div class="summary">
   <div class="card">
@@ -56,25 +83,51 @@ button {
     <div class="number" id="total">—</div>
   </div>
   <div class="card">
-    <div>合格銘柄</div>
+    <div>総合PASS</div>
     <div class="number green" id="passed">—</div>
+  </div>
+  <div class="card">
+    <div>トレンド合格</div>
+    <div class="number" id="trendPassed">—</div>
+  </div>
+  <div class="card">
+    <div>RS上位30%</div>
+    <div class="number" id="rsPassed">—</div>
   </div>
 </div>
 
 <p id="status">データを読み込み中...</p>
-<button onclick="loadData()">更新</button>
+
+<div class="controls">
+  <button onclick="loadData()">更新</button>
+  <button id="allButton" class="active" onclick="setFilter(false)">
+    全銘柄
+  </button>
+  <button id="passButton" onclick="setFilter(true)">
+    PASSのみ
+  </button>
+</div>
 
 <h2>スクリーニング結果</h2>
+<p class="note">
+  総合PASS = Minervini基本5条件 + RS上位30%。
+  RSは現在の監視銘柄内での相対順位（1〜99）です。
+  米国市場全体のIBD公式RS Ratingではありません。
+</p>
+
 <div class="table-wrap">
 <table>
 <thead>
 <tr>
 <th>銘柄</th>
 <th>株価</th>
+<th>RS</th>
 <th>MA50</th>
 <th>MA150</th>
 <th>MA200</th>
-<th>判定</th>
+<th>トレンド</th>
+<th>RS判定</th>
+<th>総合判定</th>
 </tr>
 </thead>
 <tbody id="results"></tbody>
@@ -83,9 +136,105 @@ button {
 </main>
 
 <script>
+let allStocks = [];
+let passOnly = false;
+
+function setFilter(onlyPass) {
+  passOnly = onlyPass;
+
+  document.getElementById("allButton")
+    .classList.toggle("active", !passOnly);
+
+  document.getElementById("passButton")
+    .classList.toggle("active", passOnly);
+
+  renderTable();
+}
+
+function makeBadge(passed) {
+  const span = document.createElement("span");
+  span.className = "pill " + (passed ? "pass" : "fail");
+  span.textContent = passed ? "PASS" : "FAIL";
+  return span;
+}
+
+function renderTable() {
+  const tbody = document.getElementById("results");
+  tbody.replaceChildren();
+
+  const stocks = allStocks
+    .filter(stock => !passOnly || stock.PASS === true)
+    .sort((a,b) =>
+      Number(b.PASS) - Number(a.PASS) ||
+      Number(b.RS ?? -1) - Number(a.RS ?? -1)
+    );
+
+  for (const stock of stocks) {
+    const tr = document.createElement("tr");
+
+    const tickerCell = document.createElement("td");
+    const link = document.createElement("a");
+
+    link.textContent = stock.Ticker;
+    link.href = "https://www.tradingview.com/chart/?symbol="
+      + encodeURIComponent(stock.Ticker);
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+
+    tickerCell.appendChild(link);
+    tr.appendChild(tickerCell);
+
+    const priceCell = document.createElement("td");
+    priceCell.textContent = stock.Price ?? "—";
+    tr.appendChild(priceCell);
+
+    const rsCell = document.createElement("td");
+    const rs = Number(stock.RS);
+
+    if (stock.RS == null || !Number.isFinite(rs)) {
+      rsCell.textContent = "—";
+    } else {
+      rsCell.textContent = rs;
+      rsCell.className =
+        rs >= 70 ? "rs-high" :
+        rs >= 40 ? "rs-mid" : "rs-low";
+    }
+    tr.appendChild(rsCell);
+
+    for (const field of ["MA50", "MA150", "MA200"]) {
+      const td = document.createElement("td");
+      td.textContent = stock[field] ?? "—";
+      tr.appendChild(td);
+    }
+
+    const trendCell = document.createElement("td");
+    trendCell.appendChild(makeBadge(stock.Trend_PASS === true));
+    tr.appendChild(trendCell);
+
+    const rsPassCell = document.createElement("td");
+    rsPassCell.appendChild(makeBadge(stock.RS_PASS === true));
+    tr.appendChild(rsPassCell);
+
+    const totalCell = document.createElement("td");
+    totalCell.appendChild(makeBadge(stock.PASS === true));
+    tr.appendChild(totalCell);
+
+    tbody.appendChild(tr);
+  }
+
+  if (stocks.length === 0) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 9;
+    td.className = "muted";
+    td.textContent = "該当する銘柄はありません";
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+  }
+}
+
 async function loadData() {
   const status = document.getElementById("status");
-  const tbody = document.getElementById("results");
 
   status.textContent = "データを読み込み中...";
 
@@ -105,49 +254,21 @@ async function loadData() {
       throw new Error("データ形式が不正です");
     }
 
-    document.getElementById("total").textContent = data.total;
-    document.getElementById("passed").textContent = data.passed;
+    allStocks = data.stocks;
 
-    tbody.replaceChildren();
+    document.getElementById("total").textContent =
+      data.total;
 
-    const stocks = [...data.stocks].sort(
-      (a,b) => Number(b.PASS) - Number(a.PASS)
-    );
+    document.getElementById("passed").textContent =
+      data.passed;
 
-    for (const stock of stocks) {
-      const tr = document.createElement("tr");
-      const values = [
-        stock.Ticker,
-        stock.Price,
-        stock.MA50,
-        stock.MA150,
-        stock.MA200
-      ];
+    document.getElementById("trendPassed").textContent =
+      allStocks.filter(s => s.Trend_PASS === true).length;
 
-      values.forEach((value, index) => {
-        const td = document.createElement("td");
+    document.getElementById("rsPassed").textContent =
+      allStocks.filter(s => s.RS_PASS === true).length;
 
-        if (index === 0) {
-          const link = document.createElement("a");
-          link.textContent = value;
-          link.href = "https://www.tradingview.com/chart/?symbol="
-            + encodeURIComponent(value);
-          link.target = "_blank";
-          link.rel = "noopener noreferrer";
-          td.appendChild(link);
-        } else {
-          td.textContent = value;
-        }
-
-        tr.appendChild(td);
-      });
-
-      const result = document.createElement("td");
-      result.textContent = stock.PASS ? "PASS" : "FAIL";
-      result.className = stock.PASS ? "green" : "red";
-      tr.appendChild(result);
-      tbody.appendChild(tr);
-    }
+    renderTable();
 
     status.textContent =
       "最終更新（日本時間）: " +
@@ -157,8 +278,7 @@ async function loadData() {
 
   } catch (error) {
     status.textContent =
-      "データ未取得: " + error.message +
-      "（次のステップで自動連携します）";
+      "データ取得エラー: " + error.message;
   }
 }
 
