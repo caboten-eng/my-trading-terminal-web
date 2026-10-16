@@ -169,15 +169,78 @@ button.active {
   <th>VCP候補</th>
 </tr>
 </thead>
+
 <tbody id="results"></tbody>
 </table>
 </div>
 
+<section id="chartSection" style="display:none; margin-top:32px;">
+  <h2 id="chartTitle">株価チャート</h2>
+  <p class="note">
+    TradingView 日足ローソク足チャート
+  </p>
+  <div id="tradingviewChart"
+       style="height:550px;width:100%;">
+  </div>
+</section>
+
 </main>
+
 
 <script>
 let allStocks = [];
 let currentFilter = "all";
+
+function showChart(ticker) {
+  const section = document.getElementById("chartSection");
+  const container = document.getElementById("tradingviewChart");
+
+  section.style.display = "block";
+  document.getElementById("chartTitle").textContent =
+    ticker + " 株価チャート";
+
+  container.replaceChildren();
+
+  const widget = document.createElement("div");
+  widget.className = "tradingview-widget-container";
+  widget.style.width = "100%";
+  widget.style.height = "100%";
+
+  const chart = document.createElement("div");
+  chart.className = "tradingview-widget-container__widget";
+  chart.style.width = "100%";
+  chart.style.height = "100%";
+
+  widget.appendChild(chart);
+
+  const script = document.createElement("script");
+  script.src =
+    "https://s3.tradingview.com/external-embedding/" +
+    "embed-widget-advanced-chart.js";
+  script.async = true;
+  script.textContent = JSON.stringify({
+    autosize: true,
+    symbol: ticker,
+    interval: "D",
+    timezone: "exchange",
+    theme: "dark",
+    style: "1",
+    locale: "ja",
+    withdateranges: true,
+    hide_side_toolbar: false,
+    allow_symbol_change: true,
+    hide_volume: false,
+    support_host: "https://www.tradingview.com"
+  });
+
+  widget.appendChild(script);
+  container.appendChild(widget);
+
+  section.scrollIntoView({
+    behavior: "smooth",
+    block: "start"
+  });
+}
 
 function setFilter(filter) {
   currentFilter = filter;
@@ -252,8 +315,11 @@ function renderTable() {
       "https://www.tradingview.com/chart/?symbol=" +
       encodeURIComponent(stock.Ticker);
 
-    link.target = "_blank";
-    link.rel = "noopener noreferrer";
+
+    link.onclick = function(event) {
+      event.preventDefault();
+      showChart(stock.Ticker);
+    };
 
     tickerCell.appendChild(link);
     tr.appendChild(tickerCell);
