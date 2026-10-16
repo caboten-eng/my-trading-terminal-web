@@ -1,11 +1,168 @@
+
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <title>My Trading Terminal</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>My Trading Terminal</title>
+<style>
+body {
+  background:#0b0f14;
+  color:#edf2f7;
+  font-family:-apple-system,BlinkMacSystemFont,sans-serif;
+  margin:0;
+  padding:20px;
+}
+main {max-width:1100px;margin:auto}
+h1 {font-size:24px}
+.subtitle {color:#8e9aaa}
+.summary {display:flex;gap:12px;margin:24px 0}
+.card {
+  background:#171f2a;
+  padding:18px;
+  border-radius:12px;
+  flex:1;
+}
+.number {font-size:28px;font-weight:bold}
+.green {color:#35d07f}
+.red {color:#ff5d68}
+table {width:100%;border-collapse:collapse}
+th,td {
+  padding:12px;
+  border-bottom:1px solid #263140;
+  text-align:left;
+}
+th {color:#8e9aaa}
+a {color:#7bb5ff}
+button {
+  background:#25354a;
+  color:white;
+  border:0;
+  padding:10px 15px;
+  border-radius:8px;
+  cursor:pointer;
+}
+.table-wrap {overflow-x:auto}
+</style>
 </head>
 <body>
-  <h1>My Trading Terminal</h1>
-  <p>株式スクリーニングシステム準備中</p>
+<main>
+<h1>MY TRADING TERMINAL</h1>
+<p class="subtitle">Minervini SEPA Screening</p>
+
+<div class="summary">
+  <div class="card">
+    <div>対象銘柄</div>
+    <div class="number" id="total">—</div>
+  </div>
+  <div class="card">
+    <div>合格銘柄</div>
+    <div class="number green" id="passed">—</div>
+  </div>
+</div>
+
+<p id="status">データを読み込み中...</p>
+<button onclick="loadData()">更新</button>
+
+<h2>スクリーニング結果</h2>
+<div class="table-wrap">
+<table>
+<thead>
+<tr>
+<th>銘柄</th>
+<th>株価</th>
+<th>MA50</th>
+<th>MA150</th>
+<th>MA200</th>
+<th>判定</th>
+</tr>
+</thead>
+<tbody id="results"></tbody>
+</table>
+</div>
+</main>
+
+<script>
+async function loadData() {
+  const status = document.getElementById("status");
+  const tbody = document.getElementById("results");
+
+  status.textContent = "データを読み込み中...";
+
+  try {
+    const response = await fetch(
+      "./results/screening.json?t=" + Date.now(),
+      {cache:"no-store"}
+    );
+
+    if (!response.ok) {
+      throw new Error("HTTP " + response.status);
+    }
+
+    const data = await response.json();
+
+    if (!Array.isArray(data.stocks)) {
+      throw new Error("データ形式が不正です");
+    }
+
+    document.getElementById("total").textContent = data.total;
+    document.getElementById("passed").textContent = data.passed;
+
+    tbody.replaceChildren();
+
+    const stocks = [...data.stocks].sort(
+      (a,b) => Number(b.PASS) - Number(a.PASS)
+    );
+
+    for (const stock of stocks) {
+      const tr = document.createElement("tr");
+      const values = [
+        stock.Ticker,
+        stock.Price,
+        stock.MA50,
+        stock.MA150,
+        stock.MA200
+      ];
+
+      values.forEach((value, index) => {
+        const td = document.createElement("td");
+
+        if (index === 0) {
+          const link = document.createElement("a");
+          link.textContent = value;
+          link.href = "https://www.tradingview.com/chart/?symbol="
+            + encodeURIComponent(value);
+          link.target = "_blank";
+          link.rel = "noopener noreferrer";
+          td.appendChild(link);
+        } else {
+          td.textContent = value;
+        }
+
+        tr.appendChild(td);
+      });
+
+      const result = document.createElement("td");
+      result.textContent = stock.PASS ? "PASS" : "FAIL";
+      result.className = stock.PASS ? "green" : "red";
+      tr.appendChild(result);
+      tbody.appendChild(tr);
+    }
+
+    status.textContent =
+      "最終更新（日本時間）: " +
+      new Date(data.updated_at).toLocaleString("ja-JP", {
+        timeZone:"Asia/Tokyo"
+      });
+
+  } catch (error) {
+    status.textContent =
+      "データ未取得: " + error.message +
+      "（次のステップで自動連携します）";
+  }
+}
+
+loadData();
+</script>
 </body>
 </html>
